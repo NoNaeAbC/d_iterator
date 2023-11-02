@@ -294,6 +294,30 @@ namespace it {
 	}
 
 
+	/*
+	 * Maybe contrary to what's expected this library doesn't do full lazy evaluation.
+	 * If the code will never be executed, it's the compilers job to dead code eliminate it.
+	 * Or the programmers job to not write it.
+	 *
+	 * This function is a prime example. It's not lazy.
+	 */
+	template<CustomIterator CI>
+	constexpr auto skip(CI it, uint64 n) {
+		for (uint64 i = 0; i < n; i++) { ++it; }
+
+		return it;
+	}
+	struct skip_ {
+		uint64 _n;
+		constexpr explicit skip_(uint64 n) : _n(n) {}
+	};
+	constexpr auto skip(uint64 n) { return skip_(n); }
+	template<CustomIterator CI>
+	constexpr auto operator|(CI it, skip_ n) {
+		return skip(it, n._n);
+	}
+
+
 	template<CustomIterator CI_1, CustomIterator CI_2>
 	constexpr auto zip(CI_1 it_1, CI_2 it_2) {
 		using T_1 = CI_1::value_type;
