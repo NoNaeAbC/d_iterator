@@ -591,6 +591,50 @@ namespace it {
 		return _{it};
 	}
 
+	/*
+	 * If *it is expensive but called multiple times, the performance can be improved by caching the value.
+	 * This should be valid since *it should be pure.
+	 * This iterator caches the value everytime it's incremented.
+	 * This may waste resources if only it++ is called without *it,
+	 * but *it stays const and tread safe.
+	 */
+	template<CustomIterator CI>
+	constexpr auto caching_iterator(CI it) {
+		using T = CI::value_type;
+		struct _ {
+			using value_type [[maybe_unused]] = TypeMapper<T>::Type;
+
+			CI _it;
+			T  cache;
+
+			_() {
+				if (_it.has_next()) { cache = *_it; }
+			}
+
+			constexpr void operator++() {
+				++_it;
+				if (_it.has_next()) { cache = *_it; }
+			}
+
+			constexpr value_type operator*() { return cache; }
+
+			[[nodiscard]] constexpr bool has_next() const { return _it.has_next(); }
+
+			[[nodiscard]] constexpr uint64 count() const
+				requires(!CountingIterator<CI>)
+			{
+				CI copy = _it;
+				return algo::count(copy);
+			}
+
+			[[nodiscard]] constexpr uint64 count() const
+				requires(CountingIterator<CI>)
+			{
+				return _it.count();
+			}
+		};
+		return _{it};
+	}
 } // namespace it
 
 
