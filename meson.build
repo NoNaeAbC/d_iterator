@@ -70,7 +70,7 @@ elif compiler.get_id() == 'msvc'
   # MSVC doesn't have a direct equivalent to `-march=native`, so you might need to determine the proper flag based on the host or leave it as is.
 endif
 
-benchmark_dep = dependency('benchmark')
+benchmark_dep = subproject('google-benchmark', required: false).get_variable('google_benchmark_dep')
 threads_dep = dependency('threads')
 benchmark_exe = executable(
     'benchmark_exe',

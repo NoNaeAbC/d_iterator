@@ -15,6 +15,7 @@ The following commands will install googletest and run the unit tests.
 
 ```bash
 meson wrap install gtest
+meson wrap install google-benchmark
 meson setup build
 ninja -C build test
 ```
