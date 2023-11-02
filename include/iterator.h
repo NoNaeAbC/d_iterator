@@ -415,10 +415,14 @@ namespace it {
 
 			constexpr void operator++() {
 				++current_it_1;
-				if (!current_it_1.has_next()) {
+				while (!current_it_1.has_next()) {
 					current_it_1 = _it_1;
 					++_it_2;
-					if (_it_2.has_next()) { it_value_cache = *_it_2; }
+					if (_it_2.has_next()) {
+						it_value_cache = *_it_2;
+					} else {
+						return;
+					}
 				}
 			}
 
