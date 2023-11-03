@@ -265,13 +265,21 @@ TEST(cached_iterator, cache_correct) {
 
 	for (uint64 i = 0; i < len; i++) { arr[i] = int(i); }
 
-	auto it = it::iterator(arr, len) | it::caching_iterator();
+	auto cached_it = it::iterator(arr, len) | it::caching_iterator();
 
-	auto cached_it = it::caching_iterator(it);
 
 	ASSERT_EQ(*cached_it, 0);
 	ASSERT_EQ(*cached_it, 0);
 	ASSERT_EQ(*cached_it, 0);
+
+	uint64 number_to_skip = 10;
+
+	auto skip_it = cached_it | it::skip(number_to_skip);
+
+
+	ASSERT_EQ(*skip_it, number_to_skip);
+	ASSERT_EQ(*skip_it, number_to_skip);
+	ASSERT_EQ(*skip_it, number_to_skip);
 }
 
 int main(int argc, char **argv) {
