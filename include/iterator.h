@@ -285,9 +285,8 @@ namespace it {
 	}
 	struct take_ {
 		uint64 _n;
-		constexpr explicit take_(uint64 n) : _n(n) {}
 	};
-	constexpr auto take(uint64 n) { return take_(n); }
+	constexpr auto take(uint64 n) { return take_{n}; }
 	template<CustomIterator CI>
 	constexpr auto operator|(CI it, take_ n) {
 		return take(it, n._n);
@@ -309,9 +308,8 @@ namespace it {
 	}
 	struct skip_ {
 		uint64 _n;
-		constexpr explicit skip_(uint64 n) : _n(n) {}
 	};
-	constexpr auto skip(uint64 n) { return skip_(n); }
+	constexpr auto skip(uint64 n) { return skip_{n}; }
 	template<CustomIterator CI>
 	constexpr auto operator|(CI it, skip_ n) {
 		return skip(it, n._n);
@@ -637,7 +635,7 @@ namespace it {
 			CI _it;
 			T  cache = undefined<T>();
 
-			constexpr _(CI it) : _it(it) {
+			explicit constexpr _(CI it) : _it(it) {
 				if (_it.has_next()) { cache = *_it; }
 			}
 
