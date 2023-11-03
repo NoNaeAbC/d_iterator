@@ -89,9 +89,9 @@ These algorithms do the actual work.
 
 ```cpp
 
-// reduction, note you cant pass a function pointer as argument.
-// it must be a template argument.
-auto maximum = algo::reduce<[](auto a, auto b) { return max(a, b); }>(it, 0); // returns the maximum element
+// reduction, note that the lambda must have an explicit type as argument
+// auto won't work, maybe in the future it will be reworked
+auto maximum = algo::reduce(it, [](int a, int b) { return max(a, b); }, 0); // returns the maximum element
 
 auto element_count = algo::count(it); // returns the number of elements
 

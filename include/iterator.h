@@ -8,6 +8,7 @@
 #include "c_int_types.h"
 
 #if !defined(NO_STD)
+#include <tuple>
 #include <type_traits>
 #endif
 
@@ -519,29 +520,84 @@ namespace it {
 
 } // namespace it
 
+
 namespace algo {
-	template<auto L, it::CustomIterator CI>
-	constexpr auto reduce(CI it, typename decltype(it)::value_type initial) {
-		using T = typename decltype(it)::value_type;
-		T acc   = initial;
+	template<std::size_t idx, typename... Ts>
+	struct template_element;
+
+	template<typename T, typename... Ts>
+	struct template_element<0, T, Ts...> {
+		using type = T;
+	};
+
+	template<std::size_t idx, typename T, typename... Ts>
+	struct template_element<idx, T, Ts...> {
+		static_assert(idx < sizeof...(Ts) + 1, "Index out of bounds.");
+		using type = typename template_element<idx - 1, Ts...>::type;
+	};
+	template<uint64 idx, typename... Ts>
+	using template_element_t = typename template_element<idx, Ts...>::type;
+
+	template<typename T>
+	struct function_traits : function_traits<decltype(&T::operator())> {};
+
+	template<typename ClassType, typename ReturnType, typename... Args>
+	struct function_traits<ReturnType (ClassType::*)(Args...) const> {
+		static_assert(sizeof...(Args) >= 2, "The function must have at least two parameters.");
+
+		using first_argument_type = typename template_element<0, Args...>::type;
+
+		using second_argument_type = typename template_element<1, Args...>::type;
+	};
+	template<typename T>
+	using second_argument_t = typename function_traits<T>::second_argument_type;
+	template<typename T>
+	using first_argument_t = typename function_traits<T>::first_argument_type;
+
+
+	template<class T, class OUT>
+	concept FoldFunction_I = requires(T t, second_argument_t<T> in, OUT out) { out = t(out, in); };
+
+	template<it::CustomIterator CI, class OUT, FoldFunction_I<OUT> L>
+	constexpr OUT reduce(CI it, L func, OUT initial) {
+		static_assert(it::is_same_v<typename CI::value_type, first_argument_t<L>>,
+					  "The iterator value type must be the same as the first argument of the function.");
+		OUT acc = initial;
 		while (it.has_next()) {
-			acc = L(acc, *it);
+			acc = func(acc, *it);
 			++it;
 		}
 		return acc;
 	}
-	template<auto L, typename T>
+	template<typename OUT, FoldFunction_I<OUT> L>
 	struct reduce_ {
-		T _initial;
-		constexpr explicit reduce_(T initial) : _initial(initial) {}
+		const OUT _initial;
+		const L   _func;
 	};
-	template<auto L /*used for template deduction later*/, typename T>
-	constexpr auto reduce(T initial) {
-		return reduce_<L, T>(initial);
+	template<typename OUT, FoldFunction_I<OUT> L>
+	constexpr auto reduce(OUT initial, L func) {
+		return reduce_<OUT, L>{
+				._initial = initial,
+				._func    = func,
+		};
 	}
-	template<auto L, it::CustomIterator CI>
-	constexpr auto operator|(CI it, reduce_<L, typename CI::value_type> initial) {
-		return reduce<L>(it, initial._initial);
+	template<it::CustomIterator CI, class OUT, FoldFunction_I<OUT> L>
+	constexpr auto operator|(CI it, reduce_<OUT, L> initial) {
+		static_assert(it::is_same_v<typename CI::value_type, first_argument_t<L>>,
+					  "The iterator value type must be the same as the first argument of the function.");
+		return reduce(it, initial._func, initial._initial);
+	}
+
+	template<typename E>
+	constexpr auto sum() {
+		return reduce(E(0), [](E a, E b) { return a + b; });
+	}
+
+	template<typename E, it::CustomIterator CI>
+	constexpr auto sum(CI it) {
+		static_assert(it::is_same_v<typename CI::value_type, E>,
+					  "The iterator value type must be the same as the first argument of the function.");
+		return reduce(it, [](E a, E b) { return a + b; }, E(0));
 	}
 
 	template<it::CustomIterator CI>

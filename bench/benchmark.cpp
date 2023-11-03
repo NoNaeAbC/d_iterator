@@ -152,7 +152,7 @@ static void BM_stupid_count(benchmark::State &s) {
 
 	for ([[maybe_unused]] auto _: s) {
 		uint64 count = it::iterator(arr, size) | it::map([](int) -> uint64 { return 1ULL; })
-					 | algo::reduce<[](uint64 a, uint64 b) { return a + b; }>(uint64(0));
+					 | algo::reduce(uint64(0), [](uint64 a, uint64 b) { return a + b; });
 
 
 		benchmark::DoNotOptimize(std::move(count));

@@ -75,7 +75,7 @@ TEST(reduction_algoritm, simple_sum) {
 	const uint64 N     = 100;
 	const uint64 SUM_N = N * (N + 1) / 2;
 
-	const int sum = seq | it::take(N + 1) | algo::reduce<[](int a, int b) { return a + b; }>(0);
+	const int sum = seq | it::take(N + 1) | algo::reduce(0, [](int a, int b) { return a + b; });
 
 	ASSERT_EQ(sum, SUM_N);
 }
@@ -87,7 +87,7 @@ TEST(reduction_algoritm, stupit_count) {
 	const uint64 N = 100;
 
 	uint64 count_1 = seq | it::take(N + 1) | it::map([](int) -> uint64 { return 1ULL; })
-				   | algo::reduce<[](uint64 a, uint64 b) { return a + b; }>(uint64(0));
+				   | algo::reduce(uint64(0), [](uint64 a, uint64 b) { return a + b; });
 
 	uint64 count_2 = seq | it::take(N + 1) | algo::count();
 
