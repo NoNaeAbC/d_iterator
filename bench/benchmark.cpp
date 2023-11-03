@@ -97,10 +97,78 @@ static void BM_count_pairs(benchmark::State &s) {
 	}
 }
 
+static void BM_skip(benchmark::State &s) {
+	uint64 size = 1000;
+
+	int *arr = new int[size];
+	for (uint64 i = 0; i < size; i++) { arr[i] = i; }
+
+	for ([[maybe_unused]] auto _: s) {
+
+		const auto it = it::iterator(arr, size) | it::skip(500);
+
+		benchmark::DoNotOptimize(std::move(*it));
+		benchmark::DoNotOptimize(std::move(arr));
+		benchmark::DoNotOptimize(std::move(size));
+	}
+	delete[] arr;
+}
+
+template<bool use_cache>
+static void BM_caching_iterator(benchmark::State &s) {
+	uint64 size = 1000;
+
+	int *arr = new int[size];
+	for (uint64 i = 0; i < size; i++) { arr[i] = i; }
+	// use some map function to generate some work
+	for ([[maybe_unused]] auto _: s) {
+		auto it = it::iterator(arr, size) | it::map([](int i) { return i * i / 2 + i * 4; });
+		if constexpr (use_cache) {
+			auto c_it = it::caching_iterator(it);
+			while (c_it.has_next()) {
+				benchmark::DoNotOptimize(*c_it);
+				benchmark::DoNotOptimize(*c_it);
+				++c_it;
+			}
+		} else {
+			while (it.has_next()) {
+				benchmark::DoNotOptimize(*it);
+				benchmark::DoNotOptimize(*it);
+				++it;
+			}
+		}
+		benchmark::DoNotOptimize(std::move(arr));
+		benchmark::DoNotOptimize(std::move(size));
+	}
+	delete[] arr;
+}
+
+static void BM_stupid_count(benchmark::State &s) {
+
+	uint64 size = 1000;
+
+	int *arr = new int[size];
+	for (uint64 i = 0; i < size; i++) { arr[i] = i; }
+
+	for ([[maybe_unused]] auto _: s) {
+		uint64 count = it::iterator(arr, size) | it::map([](int) -> uint64 { return 1ULL; })
+					 | algo::reduce<[](uint64 a, uint64 b) { return a + b; }>(uint64(0));
+
+
+		benchmark::DoNotOptimize(std::move(count));
+		benchmark::DoNotOptimize(std::move(size));
+	}
+	delete[] arr;
+}
+
 BENCHMARK(BM_count_pairs<count_pairs_naive>);
 BENCHMARK(BM_count_pairs<count_pairs_naive2>);
 BENCHMARK(BM_count_pairs<count_pairs_better>);
 BENCHMARK(BM_count_pairs<count_pairs>);
+BENCHMARK(BM_caching_iterator<true>);
+BENCHMARK(BM_caching_iterator<false>);
+BENCHMARK(BM_skip);
+BENCHMARK(BM_stupid_count);
 
 
 BENCHMARK_MAIN();

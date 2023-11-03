@@ -80,6 +80,20 @@ TEST(reduction_algoritm, simple_sum) {
 	ASSERT_EQ(sum, SUM_N);
 }
 
+TEST(reduction_algoritm, stupit_count) {
+
+	const it::infinite_sequence_generator<int> seq;
+
+	const uint64 N = 100;
+
+	uint64 count_1 = seq | it::take(N + 1) | it::map([](int) -> uint64 { return 1ULL; })
+				   | algo::reduce<[](uint64 a, uint64 b) { return a + b; }>(uint64(0));
+
+	uint64 count_2 = seq | it::take(N + 1) | algo::count();
+
+	ASSERT_EQ(count_1, count_2);
+}
+
 constexpr int RANGE_MIN = 4900;
 constexpr int RANGE_MAX = 4964;
 constexpr int MAGIC_5   = 5;
