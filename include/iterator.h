@@ -593,10 +593,9 @@ namespace algo {
 		return reduce(E(0), [](E a, E b) { return a + b; });
 	}
 
-	template<typename E, it::CustomIterator CI>
+	template<it::CustomIterator CI>
 	constexpr auto sum(CI it) {
-		static_assert(it::is_same_v<typename CI::value_type, E>,
-					  "The iterator value type must be the same as the first argument of the function.");
+		using E = typename CI::value_type;
 		return reduce(it, [](E a, E b) { return a + b; }, E(0));
 	}
 

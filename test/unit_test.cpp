@@ -80,6 +80,19 @@ TEST(reduction_algoritm, simple_sum) {
 	ASSERT_EQ(sum, SUM_N);
 }
 
+TEST(reduction_algoritm, sum_helper) {
+	const it::infinite_sequence_generator<int> seq;
+
+	const uint64 N     = 100;
+	const uint64 SUM_N = N * (N + 1) / 2;
+
+	const int sum  = seq | it::take(N + 1) | algo::sum<int>();
+	const int sum2 = algo::sum(seq | it::take(N + 1));
+
+	ASSERT_EQ(sum, SUM_N);
+	ASSERT_EQ(sum2, SUM_N);
+}
+
 TEST(reduction_algoritm, stupit_count) {
 
 	const it::infinite_sequence_generator<int> seq;

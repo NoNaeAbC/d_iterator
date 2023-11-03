@@ -91,7 +91,13 @@ These algorithms do the actual work.
 
 // reduction, note that the lambda must have an explicit type as argument
 // auto won't work, maybe in the future it will be reworked
+// The current issue is, that the type if the second argument is dependent of the iterator type
+// But at this point it can't be deduced especially it the pipe notation is used
 auto maximum = algo::reduce(it, [](int a, int b) { return max(a, b); }, 0); // returns the maximum element
+
+// the reduction helper sum
+auto sum = algo::sum(it); // returns the sum of all elements
+auto sum = it | algo::sum<int>(); // The pipe notation requires the type to be specified
 
 auto element_count = algo::count(it); // returns the number of elements
 
