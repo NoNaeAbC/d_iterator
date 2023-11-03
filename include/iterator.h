@@ -614,6 +614,12 @@ namespace it {
 		};
 		return _{it};
 	}
+	struct counted_wrapper_ {};
+	constexpr auto counted_wrapper() { return counted_wrapper_{}; }
+	template<CustomIterator CI>
+	constexpr auto operator|(CI it, counted_wrapper_) {
+		return counted_wrapper(it);
+	}
 
 	/*
 	 * If *it is expensive but called multiple times, the performance can be improved by caching the value.
@@ -629,7 +635,11 @@ namespace it {
 			using value_type [[maybe_unused]] = TypeMapper<T>::Type;
 
 			CI _it;
-			T  cache;
+			T  cache = undefined<T>();
+
+			constexpr _(CI it) : _it(it) {
+				if (_it.has_next()) { cache = *_it; }
+			}
 
 			_() {
 				if (_it.has_next()) { cache = *_it; }
@@ -640,24 +650,25 @@ namespace it {
 				if (_it.has_next()) { cache = *_it; }
 			}
 
-			constexpr value_type operator*() { return cache; }
+			constexpr value_type operator*() const { return cache; }
 
 			[[nodiscard]] constexpr bool has_next() const { return _it.has_next(); }
 
-			[[nodiscard]] constexpr uint64 count() const
-				requires(!CountingIterator<CI>)
-			{
-				CI copy = _it;
-				return algo::count(copy);
-			}
 
 			[[nodiscard]] constexpr uint64 count() const
-				requires(CountingIterator<CI>)
+				requires CountingIterator<CI>
 			{
-				return _it.count();
+				if constexpr (CountingIterator<CI>) { return _it.count(); }
+				return 0;
 			}
 		};
 		return _{it};
+	}
+	struct caching_iterator_ {};
+	constexpr auto caching_iterator() { return caching_iterator_{}; }
+	template<CustomIterator CI>
+	constexpr auto operator|(CI it, caching_iterator_) {
+		return caching_iterator(it);
 	}
 } // namespace it
 

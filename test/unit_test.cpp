@@ -259,6 +259,20 @@ TEST(append, vector) {
 	for (uint64 i = 0; i < full.size(); i++) { ASSERT_EQ(full[i], v_full[i]); }
 }
 
+TEST(cached_iterator, cache_correct) {
+	const uint64 len = 1000;
+	int          arr[len]{};
+
+	for (uint64 i = 0; i < len; i++) { arr[i] = int(i); }
+
+	auto it = it::iterator(arr, len) | it::caching_iterator();
+
+	auto cached_it = it::caching_iterator(it);
+
+	ASSERT_EQ(*cached_it, 0);
+	ASSERT_EQ(*cached_it, 0);
+	ASSERT_EQ(*cached_it, 0);
+}
 
 int main(int argc, char **argv) {
 
