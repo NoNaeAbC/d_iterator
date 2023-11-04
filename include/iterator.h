@@ -707,9 +707,6 @@ namespace it {
 				return _it_1.count() * (_it_2.count() - 1) + current_it_1.count();
 			}
 
-			// this is a random order iterator, so it is valid to use the identity function
-			using reverse_t = _;
-			[[nodiscard]] constexpr _ reverse() const { return *this; }
 		};
 
 		return _(it_1, it_2);
@@ -760,9 +757,6 @@ namespace it {
 				return it_count * (it_count - 1) / 2 + iteration_in_current;
 			}
 
-			// this is a random order iterator, so it is valid to use the identity function
-			using reverse_t = _;
-			[[nodiscard]] constexpr _ reverse() const { return *this; }
 		};
 
 		return _(it);
