@@ -14,9 +14,15 @@
 
 namespace it {
 
-	constexpr int max(int a, int b) { return a > b ? a : b; }
+	template<class T>
+	constexpr T max(T a, T b) {
+		return a > b ? a : b;
+	}
 
-	constexpr int min(int a, int b) { return a > b ? b : a; }
+	template<class T>
+	constexpr T min(T a, T b) {
+		return a > b ? b : a;
+	}
 
 	template<typename T, typename U>
 	struct is_same {
@@ -59,7 +65,7 @@ namespace it {
 
 	// Helper functions to mimic std::__declval and __is_same
 	template<typename T>
-	T &&__declval(); // No definition needed, it's never called.
+	T &&_declare_val(); // No definition needed, it's never called.
 
 
 	template<typename From, typename To>
@@ -71,7 +77,7 @@ namespace it {
 
 	public:
 		// The value will be true if and only if From can be implicitly converted to To
-		static const bool value = !__is_same(decltype(test(__declval<From>())), void);
+		static const bool value = !is_same_v<decltype(test(_declare_val<From>())), void>;
 	};
 
 	template<typename From, typename To>
