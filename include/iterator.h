@@ -57,10 +57,64 @@ namespace it {
 		using Type = const T &;
 	};
 
+	// Helper functions to mimic std::__declval and __is_same
+	template<typename T>
+	T &&__declval(); // No definition needed, it's never called.
+
+
+	template<typename From, typename To>
+	struct is_convertible_helper {
+	private:
+		// test() tries to call the helper function and checks if the return type is To
+		static void test(...);
+		static To   test(To);
+
+	public:
+		// The value will be true if and only if From can be implicitly converted to To
+		static const bool value = !__is_same(decltype(test(__declval<From>())), void);
+	};
+
+	template<typename From, typename To>
+	concept ConvertibleTo = is_convertible_helper<From, To>::value;
+
+	// Remove Reference
+	template<typename T>
+	struct remove_reference {
+		using type = T;
+	};
+
+	template<typename T>
+	struct remove_reference<T &> {
+		using type = T;
+	};
+
+	template<typename T>
+	struct remove_reference<T &&> {
+		using type = T;
+	};
+
+	// Helper alias template for remove_reference
+	template<typename T>
+	using remove_reference_t = typename remove_reference<T>::type;
+
+	// Add Pointer
+	template<typename T>
+	struct add_pointer {
+		using type = T *;
+	};
+
+	// Helper alias template for add_pointer
+	template<typename T>
+	using add_pointer_t = typename add_pointer<T>::type;
+
+	// Combine them to mimic std::add_pointer_t<std::remove_reference_t<T>>
+	template<typename T>
+	using add_pointer_to_removed_reference_t = add_pointer_t<remove_reference_t<T>>;
+
 	template<typename T>
 	concept CustomIterator = requires(const T it, T other, bool b, T::value_type t) {
 		b = it.has_next();
-		{ *it } -> same_as<typename T::value_type>;
+		{ *it } -> ConvertibleTo<typename T::value_type>;
 		++other;
 		other = T(it);
 	};
@@ -72,31 +126,62 @@ namespace it {
 	concept ReverseIterator = CustomIterator<T> && requires(const T it, T r) { r = it.reverse(); };
 
 	template<class T>
-	struct iterator {
-		using value_type [[maybe_unused]] = TypeMapper<T>::Type;
+	struct cpp_iterator_adapter {
 
-		T *begin;
-		T *end;
+		struct sentinel {};
 
-		constexpr iterator() : begin(nullptr), end(nullptr) {}
+		constexpr cpp_iterator_adapter() = default;
 
-		constexpr iterator(T *begin, T *end) : begin(begin), end(end) {}
+		// Assuming T is the derived type
+		T                     &derived() { return *static_cast<T *>(*this); }
+		[[nodiscard]] const T &derived() const { return static_cast<const T &>(*this); }
 
-		constexpr iterator(T *begin, uint64 size) : begin(begin), end(begin + size) {}
+		using iterator_type = T;
+		using sentinel_type = sentinel;
 
-		constexpr void operator++() { begin++; }
+		// begin simply returns a reference to the derived iterator
+		[[nodiscard]] iterator_type begin() const { return derived(); }
 
-		constexpr T &operator*() { return *begin; }
+		// end returns a default-constructed sentinel object
+		[[nodiscard]] sentinel_type end() const { return {}; }
 
-		constexpr value_type operator*() const { return *begin; }
-
-		[[nodiscard]] constexpr bool has_next() const { return begin != end; }
-
-		[[nodiscard]] constexpr uint64 count() const { return end - begin; }
+		// Compare the derived iterator with sentinel to check for the end
+		friend bool operator==(const cpp_iterator_adapter &a, const sentinel &) { return !a.derived().has_next(); }
+		// Provide increment, dereference, and other iterator functionality
+		// as needed by forwarding to the derived iterator.
 	};
 
 	template<class T>
-	struct single_element_iterator {
+	struct iterator : public cpp_iterator_adapter<iterator<T>> {
+		using value_type [[maybe_unused]] = TypeMapper<T>::Type;
+
+		T *_begin = nullptr;
+		T *_end   = nullptr;
+
+		using pointer   = add_pointer_to_removed_reference_t<value_type>;
+		using reference = value_type &;
+
+		constexpr iterator() = default;
+
+		constexpr iterator(T *begin, T *end) : _begin(begin), _end(end) {}
+
+		constexpr iterator(T *begin, uint64 size) : _begin(begin), _end(begin + size) {}
+
+		constexpr void operator++() { _begin++; }
+
+		constexpr reference operator*() const { return *_begin; }
+
+		[[nodiscard]] constexpr bool has_next() const { return _begin != _end; }
+
+		[[nodiscard]] constexpr uint64 count() const { return _end - _begin; }
+
+
+		// Equality comparison (needed for Regular concept)
+		friend bool operator==(const iterator &a, const iterator &b) { return a._begin == b._begin; }
+	};
+
+	template<class T>
+	struct single_element_iterator : cpp_iterator_adapter<single_element_iterator<T>> {
 		using value_type [[maybe_unused]] = T;
 
 		T    element;
@@ -117,7 +202,7 @@ namespace it {
 		[[nodiscard]] constexpr uint64 count() const { return iterated ? 0 : 1; }
 	};
 
-	struct c_string_iterator {
+	struct c_string_iterator : cpp_iterator_adapter<c_string_iterator> {
 		using value_type [[maybe_unused]] = char;
 
 		const char *sting;
@@ -132,31 +217,36 @@ namespace it {
 	};
 
 	template<class T>
-	struct sequence_generator {
+	struct sequence_generator : cpp_iterator_adapter<sequence_generator<T>> {
 		using value_type [[maybe_unused]] = T;
 
-		T begin;
-		T end;
+		T _begin;
+		T _end;
 
-		constexpr void operator++() { begin++; }
+		constexpr sequence_generator(T begin, T end) : _begin(begin), _end(end) {}
 
-		constexpr T operator*() const { return begin; }
+		constexpr void operator++() { _begin++; }
 
-		[[nodiscard]] constexpr bool has_next() const { return begin != end; }
+		constexpr T operator*() const { return _begin; }
 
-		[[nodiscard]] constexpr uint64 count() const { return end - begin; }
+		[[nodiscard]] constexpr bool has_next() const { return _begin != _end; }
+
+		[[nodiscard]] constexpr uint64 count() const { return _end - _begin; }
 	};
 
 	template<class T>
-	struct infinite_sequence_generator {
+	struct infinite_sequence_generator : cpp_iterator_adapter<infinite_sequence_generator<T>> {
 
 		using value_type [[maybe_unused]] = T;
 
-		T begin = 0;
+		T _begin = 0;
 
-		constexpr void operator++() { begin++; }
+		explicit constexpr infinite_sequence_generator(T begin) : _begin(begin) {}
+		explicit constexpr infinite_sequence_generator() = default;
 
-		constexpr T operator*() const { return begin; }
+		constexpr void operator++() { _begin++; }
+
+		constexpr T operator*() const { return _begin; }
 
 		[[nodiscard]] constexpr bool has_next() const { return true; }
 
@@ -171,11 +261,13 @@ namespace it {
 
 		using T [[maybe_unused]] = decltype(lambda(*it));
 
-		struct _ {
+		struct _ : cpp_iterator_adapter<_> {
 			using value_type [[maybe_unused]] = TypeMapper<T>::Type;
 
 			CI _it;
 			FN _lambda;
+
+			explicit constexpr _(CI it, FN lambda) : _it(it), _lambda(lambda) {}
 
 			constexpr void operator++() { ++_it; }
 
@@ -194,8 +286,9 @@ namespace it {
 			//#endif
 		};
 
-		return _{it, lambda};
+		return _(it, lambda);
 	}
+
 	template<typename FN>
 	struct map_ {
 		FN _lambda;
@@ -220,7 +313,7 @@ namespace it {
 	constexpr auto filter(CI it, FN lambda) {
 		using T = CI::value_type;
 
-		struct _ {
+		struct _ : cpp_iterator_adapter<_> {
 			using value_type [[maybe_unused]] = TypeMapper<T>::Type;
 
 			CI _it;
@@ -260,11 +353,13 @@ namespace it {
 	constexpr auto take(CI it, uint64 n) {
 		using T = CI::value_type;
 
-		struct _ {
+		struct _ : cpp_iterator_adapter<_> {
 			using value_type [[maybe_unused]] = TypeMapper<T>::Type;
 
 			CI     _it;
 			uint64 _n;
+
+			constexpr _(CI it, uint64 n) : _it(it), _n(n) {}
 
 			constexpr void operator++() {
 				++_it;
@@ -282,7 +377,7 @@ namespace it {
 			}
 		};
 
-		return _{it, n};
+		return _(it, n);
 	}
 	struct take_ {
 		uint64 _n;
@@ -326,11 +421,13 @@ namespace it {
 			TypeMapper<T_2>::Type second;
 		};
 
-		struct _ {
+		struct _ : cpp_iterator_adapter<_> {
 			using value_type [[maybe_unused]] = pair_t;
 
 			CI_1 _it_1;
 			CI_2 _it_2;
+
+			constexpr _(CI_1 it_1, CI_2 it_2) : _it_1(it_1), _it_2(it_2) {}
 
 			constexpr void operator++() {
 				++_it_1;
@@ -348,7 +445,7 @@ namespace it {
 			}
 		};
 
-		return _{it_1, it_2};
+		return _(it_1, it_2);
 	}
 
 	template<CustomIterator CI_1, CustomIterator CI_2>
@@ -357,14 +454,14 @@ namespace it {
 		using T_2 = CI_2::value_type;
 		static_assert(is_same_v<T_1, T_2>);
 
-		struct _ {
+		struct _ : cpp_iterator_adapter<_> {
 			using value_type [[maybe_unused]] = TypeMapper<T_1>::Type;
 
 			CI_1 _it_1;
 			CI_2 _it_2;
 			bool iterator_in_use = false; /* false => 1, true => 2 */
 
-			_(CI_1 it_1, CI_2 it_2) : _it_1(it_1), _it_2(it_2) {}
+			constexpr _(CI_1 it_1, CI_2 it_2) : _it_1(it_1), _it_2(it_2) {}
 
 			constexpr void operator++() {
 				if (iterator_in_use) {
@@ -420,7 +517,7 @@ namespace it {
 			TypeMapper<T_2>::Type second;
 		};
 
-		struct _ {
+		struct _ : cpp_iterator_adapter<_> {
 			using value_type [[maybe_unused]] = pair_t;
 
 			CI_1 _it_1;
@@ -428,7 +525,7 @@ namespace it {
 			CI_2 _it_2;
 			T_2  it_value_cache; // it may be expensive to call *_it_2;
 
-			explicit constexpr _(CI_1 it_1, CI_2 it_2) : _it_1(it_1), current_it_1(it_1), _it_2(it_2) {
+			constexpr _(CI_1 it_1, CI_2 it_2) : _it_1(it_1), current_it_1(it_1), _it_2(it_2) {
 				if (_it_2.has_next()) {
 					it_value_cache = *_it_2;
 				} else {
@@ -471,7 +568,7 @@ namespace it {
 			TypeMapper<T>::Type second;
 		};
 
-		struct _ {
+		struct _ : cpp_iterator_adapter<_> {
 			using value_type [[maybe_unused]] = pair_t;
 
 			CI _it;
@@ -641,7 +738,7 @@ namespace it {
 	template<CustomIterator CI>
 	constexpr auto counted_wrapper(CI it) {
 		using T = CI::value_type;
-		struct _ {
+		struct _ : cpp_iterator_adapter<_> {
 			using value_type [[maybe_unused]] = TypeMapper<T>::Type;
 
 			CI _it;
@@ -684,17 +781,13 @@ namespace it {
 	template<CustomIterator CI>
 	constexpr auto caching_iterator(CI it) {
 		using T = CI::value_type;
-		struct _ {
+		struct _ : cpp_iterator_adapter<_> {
 			using value_type [[maybe_unused]] = TypeMapper<T>::Type;
 
 			CI _it;
-			T  cache = undefined<T>();
+			T  cache;
 
 			explicit constexpr _(CI it) : _it(it) {
-				if (_it.has_next()) { cache = *_it; }
-			}
-
-			_() {
 				if (_it.has_next()) { cache = *_it; }
 			}
 
@@ -715,7 +808,7 @@ namespace it {
 				return 0;
 			}
 		};
-		return _{it};
+		return _(it);
 	}
 	struct caching_iterator_ {};
 	constexpr auto caching_iterator() { return caching_iterator_{}; }

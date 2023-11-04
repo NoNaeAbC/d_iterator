@@ -192,11 +192,8 @@ TEST(count_algorithm, fancy_count) {
 }
 
 TEST(count_algorithm, unordered_pairs) {
-	const int  N  = 10;
-	const auto sq = it::sequence_generator<int>{
-			.begin = 0,
-			.end   = N,
-	};
+	const int    N     = 10;
+	const auto   sq    = it::sequence_generator<int>(0, N);
 	const uint64 SUM_N = N * (N + 1) / 2;
 
 	auto it = sq | it::unordered_pairs();
@@ -209,16 +206,10 @@ TEST(count_algorithm, unordered_pairs) {
 }
 
 TEST(count_algorithm, cross_product) {
-	const uint64 N1   = 10;
-	const uint64 N2   = 13;
-	const auto   sq_1 = it::sequence_generator<int>{
-			  .begin = 0,
-			  .end   = N1,
-    };
-	const auto sq_2 = it::sequence_generator<int>{
-			.begin = 0,
-			.end   = N2,
-	};
+	const uint64 N1    = 10;
+	const uint64 N2    = 13;
+	const auto   sq_1  = it::sequence_generator<int>(0, N1);
+	const auto   sq_2  = it::sequence_generator<int>(0, N2);
 	const uint64 SUM_N = N1 * N2;
 
 	auto it = it::cross_product(sq_1, sq_2);
@@ -234,14 +225,8 @@ TEST(zip, zero_sequence) {
 
 	const uint64 N1   = 10;
 	const uint64 N2   = 13;
-	const auto   sq_1 = it::sequence_generator<int>{
-			  .begin = 0,
-			  .end   = N1,
-    };
-	const auto sq_2 = it::sequence_generator<int>{
-			.begin = 0,
-			.end   = N2,
-	};
+	const auto   sq_1 = it::sequence_generator<int>(0, N1);
+	const auto   sq_2 = it::sequence_generator<int>(0, N2);
 
 	auto it = it::map(it::zip(sq_1, sq_2), [](auto p) { return p.first - p.second; });
 
@@ -307,6 +292,18 @@ TEST(cached_iterator, cache_correct) {
 	ASSERT_EQ(*skip_it, number_to_skip);
 	ASSERT_EQ(*skip_it, number_to_skip);
 	ASSERT_EQ(*skip_it, number_to_skip);
+}
+
+TEST(cpp_iterator_adapter, simple_iteratr) {
+
+	const uint64 len = 1000;
+	int          arr[len]{};
+
+	for (uint64 i = 0; i < len; i++) { arr[i] = int(i); }
+
+	auto cpp_it = it::iterator(arr, len) | it::filter([](int e) { return e % 5 == 3; });
+
+	for (int i: cpp_it) { ASSERT_EQ(i % 5, 3); }
 }
 
 int main(int argc, char **argv) {
