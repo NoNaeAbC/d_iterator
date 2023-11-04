@@ -300,6 +300,32 @@ TEST(cpp_iterator_adapter, simple_iteratr) {
 	for (int i: cpp_it) { ASSERT_EQ(i % 5, 3); }
 }
 
+TEST(reversing_iterators, sequence) {
+	const uint64 len = 1000;
+	int          arr[len]{};
+
+	for (uint64 i = 0; i < len; i++) { arr[i] = int(i); }
+
+	auto it = it::iterator(arr, len) | it::reverse();
+
+	for (int i = len - 1; i >= 0; i--) {
+		ASSERT_EQ(*it, i);
+		++it;
+	}
+}
+
+TEST(reversing_iterators, filter) {
+	const int len = 1000;
+
+	auto it = it::sequence_generator<int>(0, len) | it::filter([](uint64 element) { return element % 2 == 0; })
+			| it::reverse();
+
+	for (int i = len - 2; i >= 0; i -= 2) {
+		ASSERT_EQ(*it, i);
+		++it;
+	}
+}
+
 int main(int argc, char **argv) {
 
 

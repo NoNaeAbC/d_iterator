@@ -12,6 +12,58 @@
 #include <type_traits>
 #endif
 
+
+namespace algo {
+	template<std::size_t idx, typename... Ts>
+	struct template_element;
+
+	template<typename T, typename... Ts>
+	struct template_element<0, T, Ts...> {
+		using type = T;
+	};
+
+	template<std::size_t idx, typename T, typename... Ts>
+	struct template_element<idx, T, Ts...> {
+		static_assert(idx < sizeof...(Ts) + 1, "Index out of bounds.");
+		using type = typename template_element<idx - 1, Ts...>::type;
+	};
+	template<uint64 idx, typename... Ts>
+	using template_element_t = typename template_element<idx, Ts...>::type;
+
+	template<typename T>
+	struct function_traits_ret : function_traits_ret<decltype(&T::operator())> {};
+	template<typename ClassType, typename ReturnType, typename... Args>
+	struct function_traits_ret<ReturnType (ClassType::*)(Args...) const> {
+		using return_type = ReturnType;
+	};
+	template<typename T>
+	using return_value_t = typename function_traits_ret<T>::return_type;
+
+	template<typename T>
+	struct function_traits_1 : function_traits_1<decltype(&T::operator())> {};
+	template<typename ClassType, typename ReturnType, typename... Args>
+	struct function_traits_1<ReturnType (ClassType::*)(Args...) const> {
+		static_assert(sizeof...(Args) >= 1, "The function must have at least two parameters.");
+
+		using first_argument_type = typename template_element<0, Args...>::type;
+	};
+
+	template<typename T>
+	struct function_traits_2 : function_traits_2<decltype(&T::operator())> {};
+	template<typename ClassType, typename ReturnType, typename... Args>
+	struct function_traits_2<ReturnType (ClassType::*)(Args...) const> {
+		static_assert(sizeof...(Args) >= 2, "The function must have at least two parameters.");
+
+		using first_argument_type = typename template_element<0, Args...>::type;
+
+		using second_argument_type = typename template_element<1, Args...>::type;
+	};
+	template<typename T>
+	using second_argument_t = typename function_traits_2<T>::second_argument_type;
+	template<typename T>
+	using first_argument_t = typename function_traits_1<T>::first_argument_type;
+
+} // namespace algo
 namespace it {
 
 	template<class T>
@@ -129,7 +181,9 @@ namespace it {
 	concept CountingIterator = CustomIterator<T> && requires(const T it, uint64 count) { count = it.count(); };
 
 	template<typename T>
-	concept ReverseIterator = CustomIterator<T> && requires(const T it, T r) { r = it.reverse(); };
+	concept ReverseIterator = CustomIterator<T> && requires(const T it) {
+		{ it.reverse() } -> same_as<typename T::reverse_t>;
+	};
 
 	template<class T>
 	struct cpp_iterator_adapter {
@@ -157,8 +211,18 @@ namespace it {
 		// as needed by forwarding to the derived iterator.
 	};
 
-	template<class T>
-	struct iterator : public cpp_iterator_adapter<iterator<T>> {
+	enum class IteratorType {
+		Forward,
+		Reverse,
+	};
+
+	constexpr IteratorType operator!(IteratorType type) {
+		if (type == IteratorType::Forward) { return IteratorType::Reverse; }
+		return IteratorType::Forward;
+	}
+
+	template<class T, IteratorType direction = IteratorType::Forward>
+	struct iterator : public cpp_iterator_adapter<iterator<T, direction>> {
 		using value_type [[maybe_unused]] = TypeMapper<T>::Type;
 
 		T *_begin = nullptr;
@@ -173,9 +237,19 @@ namespace it {
 
 		constexpr iterator(T *begin, uint64 size) : _begin(begin), _end(begin + size) {}
 
-		constexpr void operator++() { _begin++; }
+		constexpr void operator++() {
+			if constexpr (direction == IteratorType::Forward) { _begin++; }
+			if constexpr (direction == IteratorType::Reverse) { _end--; }
+		}
+		constexpr void operator--() {
+			if constexpr (direction == IteratorType::Forward) { _begin--; }
+			if constexpr (direction == IteratorType::Reverse) { _end++; }
+		}
 
-		constexpr reference operator*() const { return *_begin; }
+		constexpr reference operator*() const {
+			if constexpr (direction == IteratorType::Forward) { return *_begin; }
+			if constexpr (direction == IteratorType::Reverse) { return *_end; }
+		}
 
 		[[nodiscard]] constexpr bool has_next() const { return _begin != _end; }
 
@@ -183,7 +257,17 @@ namespace it {
 
 
 		// Equality comparison (needed for Regular concept)
-		friend bool operator==(const iterator &a, const iterator &b) { return a._begin == b._begin; }
+		friend bool operator==(const iterator &a, const iterator &b) {
+
+			if constexpr (direction == IteratorType::Forward) { return a._begin == b._begin; }
+			if constexpr (direction == IteratorType::Reverse) { return a._end == b._end; }
+		}
+
+		using reverse_t = iterator<T, !direction>;
+		[[nodiscard]] constexpr iterator<T, !direction> reverse() const {
+			if constexpr (direction == IteratorType::Forward) { return iterator<T, !direction>(_begin - 1, _end - 1); }
+			if constexpr (direction == IteratorType::Reverse) { return iterator<T, !direction>(_begin + 1, _end + 1); }
+		}
 	};
 
 	template<class T>
@@ -206,6 +290,9 @@ namespace it {
 		[[nodiscard]] constexpr bool has_next() const { return !iterated; }
 
 		[[nodiscard]] constexpr uint64 count() const { return iterated ? 0 : 1; }
+
+		using reverse_t = single_element_iterator<T>;
+		[[nodiscard]] constexpr single_element_iterator<T> reverse() const { return *this; }
 	};
 
 	struct c_string_iterator : cpp_iterator_adapter<c_string_iterator> {
@@ -222,8 +309,8 @@ namespace it {
 		[[nodiscard]] constexpr bool has_next() const { return *sting != '\0'; }
 	};
 
-	template<class T>
-	struct sequence_generator : cpp_iterator_adapter<sequence_generator<T>> {
+	template<class T, IteratorType direction = IteratorType::Forward>
+	struct sequence_generator : cpp_iterator_adapter<sequence_generator<T, direction>> {
 		using value_type [[maybe_unused]] = T;
 
 		T _begin;
@@ -231,13 +318,29 @@ namespace it {
 
 		constexpr sequence_generator(T begin, T end) : _begin(begin), _end(end) {}
 
-		constexpr void operator++() { _begin++; }
+		constexpr void operator++() {
+			if constexpr (direction == IteratorType::Forward) { _begin++; }
+			if constexpr (direction == IteratorType::Reverse) { _end--; }
+		}
 
-		constexpr T operator*() const { return _begin; }
+		constexpr T operator*() const {
+			if constexpr (direction == IteratorType::Forward) { return _begin; }
+			if constexpr (direction == IteratorType::Reverse) { return _end; }
+		}
 
 		[[nodiscard]] constexpr bool has_next() const { return _begin != _end; }
 
 		[[nodiscard]] constexpr uint64 count() const { return _end - _begin; }
+
+		using reverse_t = sequence_generator<T, !direction>;
+		[[nodiscard]] constexpr sequence_generator<T, !direction> reverse() const {
+			if constexpr (direction == IteratorType::Forward) {
+				return sequence_generator<T, !direction>(_begin - 1, _end - 1);
+			}
+			if constexpr (direction == IteratorType::Reverse) {
+				return sequence_generator<T, !direction>(_begin + 1, _end + 1);
+			}
+		}
 	};
 
 	template<class T>
@@ -262,37 +365,56 @@ namespace it {
 	template<typename T, typename ARG>
 	concept MapFunction = requires(T t, ARG arg) { t(arg); };
 
-	template<CustomIterator CI, MapFunction<typename CI::value_type> FN>
-	constexpr auto map(CI it, FN lambda) {
+	template<CustomIterator CI, MapFunction<typename CI::value_type> FN, class T>
+	struct _i_MapIterator : cpp_iterator_adapter<_i_MapIterator<CI, FN, T>> {
+		using value_type [[maybe_unused]] = TypeMapper<T>::Type;
 
-		using T [[maybe_unused]] = decltype(lambda(*it));
+		CI _it;
+		FN _lambda;
 
-		struct _ : cpp_iterator_adapter<_> {
-			using value_type [[maybe_unused]] = TypeMapper<T>::Type;
+		explicit constexpr _i_MapIterator(CI it, FN lambda) : _it(it), _lambda(lambda) {}
 
-			CI _it;
-			FN _lambda;
+		constexpr void operator++() { ++_it; }
 
-			explicit constexpr _(CI it, FN lambda) : _it(it), _lambda(lambda) {}
-
-			constexpr void operator++() { ++_it; }
-
-			constexpr value_type operator*() const { return _lambda(*_it); }
+		constexpr value_type operator*() const { return _lambda(*_it); }
 
 
-			[[nodiscard]] constexpr bool has_next() const { return _it.has_next(); }
+		[[nodiscard]] constexpr bool has_next() const { return _it.has_next(); }
 
-			//#if !defined(__clang__) || defined(__GNUC__)
-			[[nodiscard]] constexpr uint64 count() const
-				requires CountingIterator<CI>
-			{
-				if constexpr (CountingIterator<CI>) { return _it.count(); }
-				return 0;
-			}
-			//#endif
+		[[nodiscard]] constexpr uint64 count() const
+			requires CountingIterator<CI>
+		{
+			if constexpr (CountingIterator<CI>) { return _it.count(); }
+			return 0;
+		}
+
+		template<CustomIterator _i_CI>
+		struct reverse_t_s;
+
+		template<CustomIterator _i_CI>
+			requires ReverseIterator<_i_CI>
+		struct reverse_t_s<_i_CI> {
+			using type = _i_MapIterator<typename _i_CI::reverse_t, FN, T>;
 		};
 
-		return _(it, lambda);
+		template<CustomIterator _i_CI>
+			requires(!ReverseIterator<_i_CI>)
+		struct reverse_t_s<_i_CI> {
+			using type = void;
+		};
+
+		using reverse_t = typename reverse_t_s<CI>::type;
+
+		[[nodiscard]] constexpr auto reverse() const
+			requires ReverseIterator<CI>
+		{
+			return map<typename CI::reverse_t, FN>(_it.reverse(), _lambda);
+		}
+	};
+
+	template<CustomIterator CI, MapFunction<typename CI::value_type> FN>
+	constexpr auto map(CI it, FN lambda) {
+		return _i_MapIterator<CI, FN, decltype(lambda(*it))>(it, lambda);
 	}
 
 	template<typename FN>
@@ -316,30 +438,53 @@ namespace it {
 	};
 
 	template<CustomIterator CI, PredicateFunction<typename CI::value_type> FN>
-	constexpr auto filter(CI it, FN lambda) {
-		using T = CI::value_type;
+	struct _i_FilterIterator : cpp_iterator_adapter<_i_FilterIterator<CI, FN>> {
+		using value_type [[maybe_unused]] = CI::value_type;
 
-		struct _ : cpp_iterator_adapter<_> {
-			using value_type [[maybe_unused]] = TypeMapper<T>::Type;
+		CI _it;
+		FN _lambda;
 
-			CI _it;
-			FN _lambda;
+		constexpr _i_FilterIterator(CI it, FN lambda) : _it(it), _lambda(lambda) {
+			while (_it.has_next() && !_lambda(*_it)) { ++_it; }
+		}
 
-			constexpr _(decltype(it) it, decltype(lambda) lambda) : _it(it), _lambda(lambda) {
-				while (_it.has_next() && !_lambda(*_it)) { ++_it; }
-			}
+		constexpr void operator++() {
+			++_it;
+			while (_it.has_next() && !_lambda(*_it)) { ++_it; }
+		}
 
-			constexpr void operator++() {
-				++_it;
-				while (_it.has_next() && !_lambda(*_it)) { ++_it; }
-			}
+		constexpr value_type operator*() const { return *_it; }
 
-			constexpr value_type operator*() const { return *_it; }
+		[[nodiscard]] constexpr bool has_next() const { return _it.has_next(); }
 
-			[[nodiscard]] constexpr bool has_next() const { return _it.has_next(); }
+		template<CustomIterator _i_CI>
+		struct reverse_t_s;
+
+		template<CustomIterator _i_CI>
+			requires ReverseIterator<_i_CI>
+		struct reverse_t_s<_i_CI> {
+			using type = _i_FilterIterator<typename _i_CI::reverse_t, FN>;
 		};
 
-		return _{it, lambda};
+		template<CustomIterator _i_CI>
+			requires(!ReverseIterator<_i_CI>)
+		struct reverse_t_s<_i_CI> {
+			using type = void;
+		};
+
+		using reverse_t = typename reverse_t_s<CI>::type;
+
+		[[nodiscard]] constexpr auto reverse() const
+			requires ReverseIterator<CI>
+		{
+			return filter<typename CI::reverse_t, FN>(_it.reverse(), _lambda);
+		}
+	};
+
+	template<CustomIterator CI, PredicateFunction<typename CI::value_type> FN>
+	constexpr auto filter(CI it, FN lambda) {
+
+		return _i_FilterIterator(it, lambda);
 	}
 	template<typename FN>
 	struct filter_ {
@@ -561,6 +706,10 @@ namespace it {
 			{
 				return _it_1.count() * (_it_2.count() - 1) + current_it_1.count();
 			}
+
+			// this is a random order iterator, so it is valid to use the identity function
+			using reverse_t = _;
+			[[nodiscard]] constexpr _ reverse() const { return *this; }
 		};
 
 		return _(it_1, it_2);
@@ -610,6 +759,10 @@ namespace it {
 
 				return it_count * (it_count - 1) / 2 + iteration_in_current;
 			}
+
+			// this is a random order iterator, so it is valid to use the identity function
+			using reverse_t = _;
+			[[nodiscard]] constexpr _ reverse() const { return *this; }
 		};
 
 		return _(it);
@@ -621,43 +774,20 @@ namespace it {
 		return unordered_pairs(it);
 	}
 
+	template<ReverseIterator CI>
+	constexpr auto reverse(CI it) {
+		return it.reverse();
+	}
+	struct reverse_ {};
+	constexpr auto reverse() { return reverse_{}; }
+	template<ReverseIterator CI>
+	constexpr auto operator|(CI it, reverse_) {
+		return reverse(it);
+	}
+
 } // namespace it
 
-
 namespace algo {
-	template<std::size_t idx, typename... Ts>
-	struct template_element;
-
-	template<typename T, typename... Ts>
-	struct template_element<0, T, Ts...> {
-		using type = T;
-	};
-
-	template<std::size_t idx, typename T, typename... Ts>
-	struct template_element<idx, T, Ts...> {
-		static_assert(idx < sizeof...(Ts) + 1, "Index out of bounds.");
-		using type = typename template_element<idx - 1, Ts...>::type;
-	};
-	template<uint64 idx, typename... Ts>
-	using template_element_t = typename template_element<idx, Ts...>::type;
-
-	template<typename T>
-	struct function_traits : function_traits<decltype(&T::operator())> {};
-
-	template<typename ClassType, typename ReturnType, typename... Args>
-	struct function_traits<ReturnType (ClassType::*)(Args...) const> {
-		static_assert(sizeof...(Args) >= 2, "The function must have at least two parameters.");
-
-		using first_argument_type = typename template_element<0, Args...>::type;
-
-		using second_argument_type = typename template_element<1, Args...>::type;
-	};
-	template<typename T>
-	using second_argument_t = typename function_traits<T>::second_argument_type;
-	template<typename T>
-	using first_argument_t = typename function_traits<T>::first_argument_type;
-
-
 	template<class T, class OUT>
 	concept FoldFunction_I = requires(T t, second_argument_t<T> in, OUT out) { out = t(out, in); };
 
