@@ -153,7 +153,7 @@ auto new_it = it | it::map([](auto a) { return *a; }) | it::filter([](auto a) { 
 
 // is equivalent to
 
-auto new_it = it::take(42)(it::filter([](auto a) { return a > 0; })(it::map([](auto a) { return *a; })(it)));
+auto new_it = it::take(it::filter(it::map(it, [](auto a) { return *a; }), [](auto a) { return a > 0; }), 42);
 ```
 
 ## Using the library without the standard library

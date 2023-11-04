@@ -44,12 +44,6 @@ struct non_trivially_copyable {
 
 	non_trivially_copyable(const non_trivially_copyable &a)            = delete;
 	non_trivially_copyable &operator=(const non_trivially_copyable &a) = delete;
-	/*
-	non_trivially_copyable(non_trivially_copyable &&other) {
-		a       = other.a;
-		other.a = 0;
-	}*/
-
 
 	void assign(int a_) { a = a_; }
 
