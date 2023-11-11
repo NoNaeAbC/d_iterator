@@ -1,8 +1,8 @@
 project('header-only-lib', 'cpp',
-    version : '0.1',
-    default_options : ['warning_level=3', 'b_lto=true','cpp_std=c++20', 'werror=true', 'buildtype=debugoptimized']
+        version : '0.1',
+        default_options : ['warning_level=3', 'b_lto=true', 'cpp_std=c++20', 'werror=true', 'buildtype=debugoptimized']
 )
-gtest_src = subproject('gtest', required: true).get_variable('gtest_dep')
+gtest_src = subproject('gtest', required : true).get_variable('gtest_dep')
 
 header_only_lib = declare_dependency(
     include_directories : 'include'
@@ -43,13 +43,13 @@ cppcheck = find_program('cppcheck', required : false)
 
 if clangtidy.found()
     run_target('clang-tidy',
-        command : [clangtidy, '-p', meson.current_build_dir(), meson.current_source_dir() + '/test/unit_test.cpp','--warnings-as-errors=*', '--header-filter=.*', '--checks=bugprone-*,performance-*,readability-*,clang-analyzer-*,-readability-identifier-length,misc-const-correctness']
+               command : [clangtidy, '-p', meson.current_build_dir(), meson.current_source_dir() + '/test/unit_test.cpp', '--warnings-as-errors=*', '--header-filter=.*', '--checks=bugprone-*,performance-*,readability-*,clang-analyzer-*,-readability-identifier-length,misc-const-correctness']
     )
 endif
 
 if cppcheck.found()
     run_target('cppcheck',
-        command : [cppcheck, '--check-level=exhaustive','--enable=warning,performance,portability,style', '--std=c++20',  meson.current_source_dir() + '/test/unit_test.cpp', '-I' + meson.current_source_dir() + '/include']
+               command : [cppcheck, '--check-level=exhaustive', '--enable=warning,performance,portability,style', '--std=c++20', meson.current_source_dir() + '/test/unit_test.cpp', '-I' + meson.current_source_dir() + '/include']
     )
 endif
 
@@ -66,8 +66,8 @@ elif compiler.get_id() == 'gcc' or compiler.get_id() == 'clang'
     native_flags = ['-mcpu=native']
 elif compiler.get_id() == 'msvc'
     native_flags = ['/arch:AVX2']
-  # Here, you can add logic to set specific architecture flags for MSVC, if needed.
-  # MSVC doesn't have a direct equivalent to `-march=native`, so you might need to determine the proper flag based on the host or leave it as is.
+    # Here, you can add logic to set specific architecture flags for MSVC, if needed.
+    # MSVC doesn't have a direct equivalent to `-march=native`, so you might need to determine the proper flag based on the host or leave it as is.
 endif
 
 # benchmark_dep = subproject('google-benchmark', required: false).get_variable('google_benchmark_dep')
@@ -76,7 +76,7 @@ threads_dep = dependency('threads')
 benchmark_exe = executable(
     'benchmark_exe',
     'bench/benchmark.cpp',
-    dependencies: [benchmark_dep, threads_dep],
-    cpp_args: ['-Ofast'] + native_flags,
-    build_by_default: false  # Prevents building the benchmark every time you run ninja.
+    dependencies : [benchmark_dep, threads_dep],
+    cpp_args : ['-Ofast'] + native_flags,
+    build_by_default : false  # Prevents building the benchmark every time you run ninja.
 )

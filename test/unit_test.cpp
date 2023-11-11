@@ -7,6 +7,8 @@
 #include <gtest/gtest.h>
 #include <random>
 
+#define D_ITERATOR_UNIT_TEST
+#include "array.h"
 #include "iterator.h"
 
 
@@ -59,7 +61,9 @@ TEST(array_iterator, array_iterator_non_trivially_copyable) {
 	auto it = it::iterator(arr, len);
 	ASSERT_EQ((*it).a, 0);
 	ASSERT_EQ(algo::count(it), len);
-	ASSERT_EQ(algo::count(it::filter(it, [](const non_trivially_copyable &e) { return e.a % 2 == 0; })), len / 2);
+	ASSERT_EQ(algo::count(
+					  it::filter(it, [](const non_trivially_copyable &e) { return e.a % 2 == 0; })),
+			  len / 2);
 	ASSERT_EQ(algo::count(it::map(it, [](const non_trivially_copyable &e) { return e.a; })), len);
 }
 
@@ -119,31 +123,22 @@ constexpr uint64 count_pairs_naive(const int *arr, uint64 len) {
 	return count;
 }
 
-
-template<it::CustomIterator T>
-void print(T it) {
-	for (; it.has_next(); ++it) {
-		auto [a, b] = *it;
-		std::cout << "(" << a << " " << b << ") ";
-	}
-	std::cout << std::endl;
-}
-
 uint64 count_pairs(int *arr, uint64 len) {
 	const auto it = it::iterator(arr, len);
 
 
-	return algo::count(it::filter(
-			it::filter(it::map(it::filter(it::cross_product(it, it), [](auto p) { return p.first >= p.second; }),
-							   [](auto p) {
-								   struct pair_t {
-									   int first;
-									   int second;
-								   };
-								   return pair_t{p.first + MAGIC_5, p.second};
-							   }),
-					   [](auto p) { return p.first * p.second >= RANGE_MIN; }),
-			[](auto p) { return p.first * p.second <= RANGE_MAX; }));
+	return algo::count(
+			it::filter(it::filter(it::map(it::filter(it::cross_product(it, it),
+													 [](auto p) { return p.first >= p.second; }),
+										  [](auto p) {
+											  struct pair_t {
+												  int first;
+												  int second;
+											  };
+											  return pair_t{p.first + MAGIC_5, p.second};
+										  }),
+								  [](auto p) { return p.first * p.second >= RANGE_MIN; }),
+					   [](auto p) { return p.first * p.second <= RANGE_MAX; }));
 }
 
 
@@ -247,6 +242,7 @@ TEST(to_array, vector) {
 	for (uint64 i = 0; i < arr.size(); i++) { ASSERT_EQ(arr[i], v[i]); }
 }
 
+
 TEST(append, vector) {
 	int              j = 1;
 	std::vector<int> v_full{++j, ++j, ++j, ++j, ++j, ++j, ++j, ++j, ++j, ++j};
@@ -317,13 +313,132 @@ TEST(reversing_iterators, sequence) {
 TEST(reversing_iterators, filter) {
 	const int len = 1000;
 
-	auto it = it::sequence_generator<int>(0, len) | it::filter([](uint64 element) { return element % 2 == 0; })
-			| it::reverse();
+	auto it = it::sequence_generator<int>(0, len)
+			| it::filter([](uint64 element) { return element % 2 == 0; }) | it::reverse();
 
 	for (int i = len - 2; i >= 0; i -= 2) {
 		ASSERT_EQ(*it, i);
 		++it;
 	}
+}
+
+
+template<uint64 size>
+constexpr auto successors(array<uint8, size> conf) {
+	return it::sequence_generator<uint8>(0, 8)
+		 | it::map([conf](uint8 i) -> array<uint8, size + 1> { return i + conf; });
+}
+
+constexpr bool threats(int row1, int row2, int diag) {
+	const int diff = row1 - row2;
+	return diff == 0 || diff == diag || diff == -diag;
+}
+
+template<uint64 size>
+constexpr bool legal(const array<uint8, size> conf) {
+	if constexpr (conf.length == 0) { return true; }
+	auto [head, tail] = conf.head_tail();
+	return it::infinite_sequence_generator(1U)                                          //
+		 | it::zip(tail.to_iterator())                                                  //
+		 | it::map([head](auto p) -> bool { return threats(head, p.second, p.first); }) //
+		 | algo::any()                                                                  //
+		 | it::negate();
+}
+
+template<it::CustomIterator CI>
+std::vector<typename CI::value_type::value_type> flatten(CI it) {
+	using T = typename CI::value_type::value_type;
+	return it | algo::reduce(std::vector<T>{}, [](std::vector<T> a, std::vector<T> b) {
+			   a.insert(a.end(), b.begin(), b.end());
+			   return a;
+		   });
+}
+struct flatten_ {};
+constexpr flatten_ flatten() { return {}; }
+template<it::CustomIterator CI>
+constexpr auto operator|(CI it, flatten_) {
+	return flatten(it);
+}
+
+template<uint64 size>
+auto backtrack(array<uint8, size> conf) {
+	if constexpr (conf.length == 8) {
+		return std::vector{conf};
+	} else {
+		return successors(conf)             //
+			 | it::filter(legal<size + 1>)  //
+			 | it::map(backtrack<size + 1>) //
+			 | flatten();
+	}
+}
+
+
+TEST(backracking, queen) {
+	auto solutions = backtrack(array<uint8, 0>{});
+	ASSERT_EQ(solutions.size(), 92);
+	const auto v_0  = array<uint8, 8>{3, 1, 6, 2, 5, 7, 4, 0};
+	const auto v_1  = array<uint8, 8>{4, 1, 3, 6, 2, 7, 5, 0};
+	const auto v_90 = array<uint8, 8>{3, 6, 4, 1, 5, 0, 2, 7};
+	const auto v_91 = array<uint8, 8>{4, 6, 1, 5, 2, 0, 3, 7};
+	ASSERT_EQ(solutions[0], v_0);
+	ASSERT_EQ(solutions[1], v_1);
+	ASSERT_EQ(solutions[90], v_90);
+	ASSERT_EQ(solutions[91], v_91);
+}
+constexpr auto successors_2(array_f<int8> conf) {
+	return it::sequence_generator<uint8>(0, 8) | it::map([conf](int8 i) { return i + conf; });
+}
+
+constexpr bool legal_2(const array_f<int8> conf) {
+	if (conf.size == 0) { return true; }
+	auto [head, tail] = conf.head_tail();
+	return it::infinite_sequence_generator(1U)                                          //
+		 | it::zip(tail.to_iterator())                                                  //
+		 | it::map([head](auto p) -> bool { return threats(head, p.second, p.first); }) //
+		 | algo::any()                                                                  //
+		 | it::negate();
+}
+
+template<it::CustomIterator CI>
+std::vector<typename CI::value_type::value_type> flatten_2(CI it) {
+	using T = typename CI::value_type::value_type;
+	return it | algo::reduce(std::vector<T>{}, [](std::vector<T> a, std::vector<T> b) {
+			   a.insert(a.end(), b.begin(), b.end());
+			   return a;
+		   });
+}
+struct flatten_2_ {};
+constexpr flatten_2_ flatten_2() { return {}; }
+template<it::CustomIterator CI>
+constexpr auto operator|(CI it, flatten_2_) {
+	return flatten_2(it);
+}
+
+auto backtrack_2(array_f<int8> conf) {
+	// if (conf.size != depth) { __builtin_trap(); }
+	// if (conf.size > 8) { __builtin_trap(); }
+	if (conf.size == 8) {
+		return std::vector{conf};
+	} else {
+		return successors_2(conf)   //
+			 | it::filter(legal_2)  //
+			 | it::map(backtrack_2) //
+			 | flatten_2();
+	}
+}
+
+
+TEST(backracking, queen2) {
+	auto solutions = backtrack_2(array_f<int8>{});
+	ASSERT_EQ(solutions.size(), 92);
+	const auto v_0  = array_f<int8>{3, 1, 6, 2, 5, 7, 4, 0};
+	const auto v_1  = array_f<int8>{4, 1, 3, 6, 2, 7, 5, 0};
+	const auto v_90 = array_f<int8>{3, 6, 4, 1, 5, 0, 2, 7};
+	const auto v_91 = array_f<int8>{4, 6, 1, 5, 2, 0, 3, 7};
+	ASSERT_EQ(solutions[0], v_0);
+	ASSERT_EQ(solutions[1], v_1);
+	ASSERT_EQ(solutions[90], v_90);
+	ASSERT_EQ(solutions[91], v_91);
 }
 
 int main(int argc, char **argv) {

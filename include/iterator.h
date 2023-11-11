@@ -169,16 +169,39 @@ namespace it {
 	template<typename T>
 	using add_pointer_to_removed_reference_t = add_pointer_t<remove_reference_t<T>>;
 
+	struct negate {};
+
+	bool operator|(bool b, negate) { return !b; }
+
+	// type_if_t<condition, type_if_true, type_if_false>
+	template<bool condition, typename T, typename F>
+	struct type_if {
+		using type = T;
+	};
+
+	template<typename T, typename F>
+	struct type_if<false, T, F> {
+		using type = F;
+	};
+
+	template<bool condition, typename T, typename F>
+	using type_if_t = typename type_if<condition, T, F>::type;
+
+
 	template<typename T>
 	concept CustomIterator = requires(const T it, T other, bool b, T::value_type t) {
 		b = it.has_next();
 		{ *it } -> ConvertibleTo<typename T::value_type>;
 		++other;
-		other = T(it);
 	};
 
 	template<typename T>
-	concept CountingIterator = CustomIterator<T> && requires(const T it, uint64 count) { count = it.count(); };
+	concept CopyableIterator
+			= CustomIterator<T> && requires(const T it, T other) { other = T(it); };
+
+	template<typename T>
+	concept CountingIterator
+			= CustomIterator<T> && requires(const T it, uint64 count) { count = it.count(); };
 
 	template<typename T>
 	concept ReverseIterator = CustomIterator<T> && requires(const T it) {
@@ -206,7 +229,9 @@ namespace it {
 		[[nodiscard]] sentinel_type end() const { return {}; }
 
 		// Compare the derived iterator with sentinel to check for the end
-		friend bool operator==(const cpp_iterator_adapter &a, const sentinel &) { return !a.derived().has_next(); }
+		friend bool operator==(const cpp_iterator_adapter &a, const sentinel &) {
+			return !a.derived().has_next();
+		}
 		// Provide increment, dereference, and other iterator functionality
 		// as needed by forwarding to the derived iterator.
 	};
@@ -217,8 +242,9 @@ namespace it {
 	};
 
 	constexpr IteratorType operator!(IteratorType type) {
-		if (type == IteratorType::Forward) { return IteratorType::Reverse; }
-		return IteratorType::Forward;
+		using enum it::IteratorType;
+		if (type == Forward) { return Reverse; }
+		return Forward;
 	}
 
 	template<class T, IteratorType direction = IteratorType::Forward>
@@ -265,8 +291,12 @@ namespace it {
 
 		using reverse_t = iterator<T, !direction>;
 		[[nodiscard]] constexpr iterator<T, !direction> reverse() const {
-			if constexpr (direction == IteratorType::Forward) { return iterator<T, !direction>(_begin - 1, _end - 1); }
-			if constexpr (direction == IteratorType::Reverse) { return iterator<T, !direction>(_begin + 1, _end + 1); }
+			if constexpr (direction == IteratorType::Forward) {
+				return iterator<T, !direction>(_begin - 1, _end - 1);
+			}
+			if constexpr (direction == IteratorType::Reverse) {
+				return iterator<T, !direction>(_begin + 1, _end + 1);
+			}
 		}
 	};
 
@@ -363,11 +393,11 @@ namespace it {
 	};
 
 	template<typename T, typename ARG>
-	concept MapFunction = requires(T t, ARG arg) { t(arg); };
+	concept MapFunction = requires(T t, T other, ARG arg) { t(arg); };
 
 	template<CustomIterator CI, MapFunction<typename CI::value_type> FN, class T>
 	struct _i_MapIterator : cpp_iterator_adapter<_i_MapIterator<CI, FN, T>> {
-		using value_type [[maybe_unused]] = TypeMapper<T>::Type;
+		using value_type [[maybe_unused]] = T;
 
 		CI _it;
 		FN _lambda;
@@ -384,8 +414,7 @@ namespace it {
 		[[nodiscard]] constexpr uint64 count() const
 			requires CountingIterator<CI>
 		{
-			if constexpr (CountingIterator<CI>) { return _it.count(); }
-			return 0;
+			return _it.count();
 		}
 
 		template<CustomIterator _i_CI>
@@ -414,6 +443,7 @@ namespace it {
 
 	template<CustomIterator CI, MapFunction<typename CI::value_type> FN>
 	constexpr auto map(CI it, FN lambda) {
+		static_assert(CustomIterator<_i_MapIterator<CI, FN, decltype(lambda(*it))>>, "help");
 		return _i_MapIterator<CI, FN, decltype(lambda(*it))>(it, lambda);
 	}
 
@@ -496,8 +526,8 @@ namespace it {
 		return filter_<FN>(lambda);
 	}
 	template<CustomIterator CI, PredicateFunction<typename CI::value_type> FN>
-	constexpr auto operator|(CI it, filter_<FN> _lambda) {
-		return filter(it, _lambda._lambda);
+	constexpr auto operator|(CI it, filter_<FN> lambda) {
+		return filter(it, lambda._lambda);
 	}
 
 	template<CustomIterator CI>
@@ -587,7 +617,9 @@ namespace it {
 
 			constexpr pair_t operator*() const { return {*_it_1, *_it_2}; }
 
-			[[nodiscard]] constexpr bool has_next() const { return _it_1.has_next() && _it_2.has_next(); }
+			[[nodiscard]] constexpr bool has_next() const {
+				return _it_1.has_next() && _it_2.has_next();
+			}
 
 			[[nodiscard]] constexpr uint64 count() const
 				requires CountingIterator<CI_1> && CountingIterator<CI_2>
@@ -597,6 +629,20 @@ namespace it {
 		};
 
 		return _(it_1, it_2);
+	}
+
+	template<CopyableIterator CI_2>
+	struct zip_ {
+		CI_2 _it_2;
+		constexpr explicit zip_(CI_2 it_2) : _it_2(it_2) {}
+	};
+	template<CopyableIterator CI_2>
+	constexpr auto zip(CI_2 it_2) {
+		return zip_<CI_2>(it_2);
+	}
+	template<CustomIterator CI_1, CopyableIterator CI_2>
+	constexpr auto operator|(CI_1 it_1, zip_<CI_2> it_2) {
+		return zip(it_1, it_2._it_2);
 	}
 
 	template<CustomIterator CI_1, CustomIterator CI_2>
@@ -628,7 +674,9 @@ namespace it {
 				return *_it_1;
 			}
 
-			[[nodiscard]] constexpr bool has_next() const { return !iterator_in_use || _it_2.has_next(); }
+			[[nodiscard]] constexpr bool has_next() const {
+				return !iterator_in_use || _it_2.has_next();
+			}
 
 			[[nodiscard]] constexpr uint64 count() const
 				requires CountingIterator<CI_1> && CountingIterator<CI_2>
@@ -659,7 +707,7 @@ namespace it {
 #pragma GCC diagnostic pop
 #endif
 
-	template<CustomIterator CI_1, CustomIterator CI_2>
+	template<CopyableIterator CI_1, CopyableIterator CI_2>
 	constexpr auto cross_product(CI_1 it_1, CI_2 it_2) {
 		using T_1 = CI_1::value_type;
 		using T_2 = CI_2::value_type;
@@ -706,13 +754,12 @@ namespace it {
 			{
 				return _it_1.count() * (_it_2.count() - 1) + current_it_1.count();
 			}
-
 		};
 
 		return _(it_1, it_2);
 	}
 
-	template<CustomIterator CI>
+	template<CopyableIterator CI>
 	constexpr auto unordered_pairs(CI it) {
 		using T = CI::value_type;
 		struct pair_t {
@@ -756,7 +803,6 @@ namespace it {
 
 				return it_count * (it_count - 1) / 2 + iteration_in_current;
 			}
-
 		};
 
 		return _(it);
@@ -788,7 +834,8 @@ namespace algo {
 	template<it::CustomIterator CI, class OUT, FoldFunction_I<OUT> L>
 	constexpr OUT reduce(CI it, L func, OUT initial) {
 		static_assert(it::is_same_v<typename CI::value_type, first_argument_t<L>>,
-					  "The iterator value type must be the same as the first argument of the function.");
+					  "The iterator value type must be the same as the first "
+					  "argument of the function.");
 		OUT acc = initial;
 		while (it.has_next()) {
 			acc = func(acc, *it);
@@ -811,7 +858,8 @@ namespace algo {
 	template<it::CustomIterator CI, class OUT, FoldFunction_I<OUT> L>
 	constexpr auto operator|(CI it, reduce_<OUT, L> initial) {
 		static_assert(it::is_same_v<typename CI::value_type, first_argument_t<L>>,
-					  "The iterator value type must be the same as the first argument of the function.");
+					  "The iterator value type must be the same as the first "
+					  "argument of the function.");
 		return reduce(it, initial._func, initial._initial);
 	}
 
@@ -825,6 +873,24 @@ namespace algo {
 		using E = typename CI::value_type;
 		return reduce(it, [](E a, E b) { return a + b; }, E(0));
 	}
+
+	template<it::CustomIterator CI>
+	constexpr bool any(CI it)
+		requires it::is_same_v<typename CI::value_type, bool>
+	{
+		while (it.has_next()) {
+			if (*it) { return true; }
+			++it;
+		}
+		return false;
+	}
+	struct any_ {};
+	constexpr auto any() { return any_{}; }
+	template<it::CustomIterator CI>
+	constexpr auto operator|(CI it, any_) {
+		return any(it);
+	}
+
 
 	template<it::CustomIterator CI>
 	constexpr uint64 count(CI it) {
