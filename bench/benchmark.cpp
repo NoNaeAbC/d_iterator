@@ -223,12 +223,11 @@ static void BM_n_queens(benchmark::State &s) {
 }
 
 
-
-constexpr auto successors_2(array_f<int8> conf) {
+constexpr auto successors_2(array_f conf) {
 	return it::sequence_generator<uint8>(0, 8) | it::map([conf](int8 i) { return i + conf; });
 }
 
-constexpr bool legal_2(const array_f<int8> conf) {
+constexpr bool legal_2(const array_f conf) {
 	if (conf.size == 0) { return true; }
 	auto [head, tail] = conf.head_tail();
 	return it::infinite_sequence_generator(1U)                                          //
@@ -253,14 +252,14 @@ constexpr auto operator|(CI it, flatten_2_) {
 	return flatten_2(it);
 }
 
-auto backtrack_2(array_f<int8> conf) {
+auto backtrack_2(array_f conf) {
 	// if (conf.size != depth) { __builtin_trap(); }
 	// if (conf.size > 8) { __builtin_trap(); }
 	if (conf.size == 8) {
 		return std::vector{conf};
 	} else {
-		return successors_2(conf)                                                            //
-			 | it::filter(legal_2)                                                           //
+		return successors_2(conf)   //
+			 | it::filter(legal_2)  //
 			 | it::map(backtrack_2) //
 			 | flatten_2();
 	}
@@ -269,7 +268,7 @@ auto backtrack_2(array_f<int8> conf) {
 
 static void BM_n_queens2(benchmark::State &s) {
 	for ([[maybe_unused]] auto _: s) {
-		auto solutions = backtrack_2(array_f<int8>{});
+		auto solutions = backtrack_2(array_f{});
 		benchmark::DoNotOptimize(std::move(solutions));
 	}
 }

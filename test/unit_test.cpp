@@ -326,7 +326,7 @@ TEST(reversing_iterators, filter) {
 template<uint64 size>
 constexpr auto successors(array<uint8, size> conf) {
 	return it::sequence_generator<uint8>(0, 8)
-		 | it::map([conf](uint8 i) -> array<uint8, size + 1> { return i + conf; });
+		 | it::map([conf](uint8 i) { return i + conf; });
 }
 
 constexpr bool threats(int row1, int row2, int diag) {
@@ -385,11 +385,11 @@ TEST(backracking, queen) {
 	ASSERT_EQ(solutions[90], v_90);
 	ASSERT_EQ(solutions[91], v_91);
 }
-constexpr auto successors_2(array_f<int8> conf) {
+constexpr auto successors_2(array_f conf) {
 	return it::sequence_generator<uint8>(0, 8) | it::map([conf](int8 i) { return i + conf; });
 }
 
-constexpr bool legal_2(const array_f<int8> conf) {
+constexpr bool legal_2(const array_f conf) {
 	if (conf.size == 0) { return true; }
 	auto [head, tail] = conf.head_tail();
 	return it::infinite_sequence_generator(1U)                                          //
@@ -414,9 +414,7 @@ constexpr auto operator|(CI it, flatten_2_) {
 	return flatten_2(it);
 }
 
-auto backtrack_2(array_f<int8> conf) {
-	// if (conf.size != depth) { __builtin_trap(); }
-	// if (conf.size > 8) { __builtin_trap(); }
+auto backtrack_2(array_f conf) {
 	if (conf.size == 8) {
 		return std::vector{conf};
 	} else {
@@ -429,12 +427,12 @@ auto backtrack_2(array_f<int8> conf) {
 
 
 TEST(backracking, queen2) {
-	auto solutions = backtrack_2(array_f<int8>{});
+	auto solutions = backtrack_2(array_f{});
 	ASSERT_EQ(solutions.size(), 92);
-	const auto v_0  = array_f<int8>{3, 1, 6, 2, 5, 7, 4, 0};
-	const auto v_1  = array_f<int8>{4, 1, 3, 6, 2, 7, 5, 0};
-	const auto v_90 = array_f<int8>{3, 6, 4, 1, 5, 0, 2, 7};
-	const auto v_91 = array_f<int8>{4, 6, 1, 5, 2, 0, 3, 7};
+	const auto v_0  = array_f{3, 1, 6, 2, 5, 7, 4, 0};
+	const auto v_1  = array_f{4, 1, 3, 6, 2, 7, 5, 0};
+	const auto v_90 = array_f{3, 6, 4, 1, 5, 0, 2, 7};
+	const auto v_91 = array_f{4, 6, 1, 5, 2, 0, 3, 7};
 	ASSERT_EQ(solutions[0], v_0);
 	ASSERT_EQ(solutions[1], v_1);
 	ASSERT_EQ(solutions[90], v_90);

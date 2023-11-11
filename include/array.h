@@ -136,98 +136,89 @@ array<T, 1> operator+(T e, array<T, 0>) {
  */
 #ifdef D_ITERATOR_UNIT_TEST
 
-template<class T>
 struct array_f {
-	T   arr[8]{-1, -1, -1, -1, -1, -1, -1, -1};
-	int size = 0;
+	uint64 arr  = ~0ULL;
+	int    size = 0;
 
-	constexpr T &operator[](uint64 i) { return arr[i]; }
-	constexpr T  operator[](uint64 i) const { return arr[i]; }
+	constexpr int8 operator[](uint64 i) const { return int8((arr >> (i * 8)) & 0xFF); }
 
 	[[nodiscard]] constexpr auto head_tail() const {
 
-		//		if (size == 0) { __builtin_trap(); }
-		//		if (size > 8) { __builtin_trap(); }
-
 		struct head_tail_pair {
-			T          head;
-			array_f<T> tail;
+			int8    head;
+			array_f tail;
 		};
 
 		array_f tail;
-		if (size > 1) {
-			for (int i = 0; i < size - 1; i++) { tail.arr[i] = arr[i + 1]; }
-		}
+		tail.arr  = arr >> 8;
 		tail.size = size - 1;
 
-		return head_tail_pair{arr[0], tail};
+		return head_tail_pair{int8(arr & 0xFF), tail};
 	}
 
-	explicit array_f(T e) {
-		arr[0] = e;
-		size   = 1;
+	explicit array_f(int8 e) {
+		arr  = uint8(e);
+		size = 1;
 	}
 
-	array_f(std::initializer_list<T> l) {
+	array_f(std::initializer_list<int8> l) {
 		int i = 0;
+		arr   = 0;
 		for (const auto &e: l) {
-			arr[i] = e;
+			arr |= uint64(uint8(e)) << (i * 8);
 			i++;
 		}
-		// if (i > 8) { __builtin_trap(); }
 		size = i;
 	}
 
 	bool operator==(const array_f &other) const {
 		if (size != other.size) { return false; }
-		for (int i = 0; i < size; i++) {
-			if (arr[i] != other.arr[i]) { return false; }
-		}
-		return true;
+		uint64 mask = ~0ULL >> (64 - size * 8);
+		return (arr & mask) == (other.arr & mask);
 	}
 
 	array_f() = default;
 
 	// implement copy and copy assignment
 	constexpr array_f(const array_f &other) {
-		for (int i = 0; i < 8; i++) { arr[i] = other.arr[i]; }
+		arr  = other.arr;
 		size = other.size;
 	}
 	constexpr array_f &operator=(const array_f &other) {
-		for (int i = 0; i < 8; i++) { arr[i] = other.arr[i]; }
+		arr  = other.arr;
 		size = other.size;
 		return *this;
 	}
 
-	struct iterator {
-		array_f arr;
-		int     index    = 0;
-		using value_type = T;
-
-		constexpr iterator(array_f arr, int index) : arr(arr), index(index) {}
-
-		[[nodiscard]] constexpr bool has_next() const { return index != arr.size; }
-		constexpr T                  operator*() const { return arr[index]; }
-		constexpr void               operator++() { index++; }
-
-		[[nodiscard]] uint64 count() const { return arr.size - index; }
-	};
-
-	[[nodiscard]] constexpr auto to_iterator() const { return iterator(*this, 0); }
+	[[nodiscard]] constexpr auto to_iterator() const;
 
 	~array_f() = default;
 };
 
 
-template<class T>
-array_f<T> operator+(T e, array_f<T> arr) {
-	//	if (arr.size > 7) { __builtin_trap(); }
-	array_f<T> result;
+struct iterator {
+	array_f arr;
+	int     index    = 0;
+	using value_type = int8;
 
-	result.arr[0] = e;
-	for (int i = 0; i < arr.size; i++) { result.arr[i + 1] = arr.arr[i]; }
-	result.size = arr.size + 1;
-	return result;
+	constexpr iterator(array_f arr, int index) : arr(arr), index(index) {}
+
+	[[nodiscard]] constexpr bool has_next() const { return index != arr.size; }
+	constexpr int8               operator*() const { return arr[index]; }
+	constexpr void               operator++() { index++; }
+
+	[[nodiscard]] uint64 count() const { return arr.size - index; }
+};
+
+[[nodiscard]] constexpr auto array_f::to_iterator() const { return iterator(*this, 0); }
+array_f                      operator+(int8 e, array_f arr) {
+    //	if (arr.size > 7) { __builtin_trap(); }
+    array_f result;
+
+    result.arr = uint8(e);
+    result.arr |= arr.arr << 8;
+    result.size = arr.size + 1;
+    return result;
 }
 
 #endif
